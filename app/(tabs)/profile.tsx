@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, ScrollView, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, Pressable, Modal, TextInput } from 'react-native';
 import { Users, QrCode, UserPlus, X, ScanLine, Trophy, Users as Users2, Plus, Settings2, LogOut } from 'lucide-react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -55,6 +55,11 @@ export default function ProfileScreen() {
   const [qrMode, setQrMode] = useState<'display' | 'scan'>('display');
   const [isManagingTeams, setIsManagingTeams] = useState(false);
   const [showNewTeamModal, setShowNewTeamModal] = useState(false);
+  const [teams, setTeams] = useState<Team[]>(TEAMS);
+  const [newTeam, setNewTeam] = useState({
+    name: '',
+    type: 'amateur' as 'amateur' | 'pro'
+  });
   const userId = 'user123'; // This would come from your auth system
 
   const handleActionPress = (action: string) => {
@@ -68,6 +73,26 @@ export default function ProfileScreen() {
 
   const handleViewTeam = (teamId: string) => {
     router.push(`/team/${teamId}`);
+  };
+
+  const handleCreateTeam = () => {
+    if (!newTeam.name.trim()) return;
+
+    const team: Team = {
+      id: Date.now().toString(),
+      name: newTeam.name.trim(),
+      role: 'Spotter', // Default role
+      memberCount: 1, // Starting with the creator
+      type: newTeam.type,
+    };
+
+    setTeams(prev => [...prev, team]);
+    setNewTeam({ name: '', type: 'amateur' });
+    setShowNewTeamModal(false);
+  };
+
+  const handleLeaveTeam = (teamId: string) => {
+    setTeams(prev => prev.filter(team => team.id !== teamId));
   };
 
   return (
@@ -121,7 +146,7 @@ export default function ProfileScreen() {
           </Pressable>
         )}
 
-        {TEAMS.map((team) => (
+        {teams.map((team) => (
           <Pressable key={team.id} style={styles.teamItem}>
             <View style={styles.teamContent}>
               <View style={styles.teamHeader}>
@@ -142,7 +167,10 @@ export default function ProfileScreen() {
                   <Text style={styles.memberCountText}>{team.memberCount} members</Text>
                 </View>
                 {isManagingTeams ? (
-                  <Pressable style={styles.leaveButton}>
+                  <Pressable 
+                    style={styles.leaveButton}
+                    onPress={() => handleLeaveTeam(team.id)}
+                  >
                     <LogOut size={16} color="#FF3B30" />
                     <Text style={styles.leaveButtonText}>Leave</Text>
                   </Pressable>
@@ -214,7 +242,10 @@ export default function ProfileScreen() {
         visible={showNewTeamModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowNewTeamModal(false)}
+        onRequestClose={() => {
+          setShowNewTeamModal(false);
+          setNewTeam({ name: '', type: 'amateur' });
+        }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -222,12 +253,67 @@ export default function ProfileScreen() {
               <Text style={styles.modalTitle}>Create New Team</Text>
               <Pressable
                 style={styles.closeButton}
-                onPress={() => setShowNewTeamModal(false)}
+                onPress={() => {
+                  setShowNewTeamModal(false);
+                  setNewTeam({ name: '', type: 'amateur' });
+                }}
               >
                 <X size={24} color="#8E8E93" />
               </Pressable>
             </View>
-            {/* Add team creation form here */}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Team Name</Text>
+              <TextInput
+                style={styles.input}
+                value={newTeam.name}
+                onChangeText={(text) => setNewTeam(prev => ({ ...prev, name: text }))}
+                placeholder="Enter team name"
+                placeholderTextColor="#8E8E93"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Team Type</Text>
+              <View style={styles.teamTypeButtons}>
+                <Pressable
+                  style={[
+                    styles.teamTypeButton,
+                    newTeam.type === 'amateur' && styles.teamTypeButtonActive
+                  ]}
+                  onPress={() => setNewTeam(prev => ({ ...prev, type: 'amateur' }))}
+                >
+                  <Text style={[
+                    styles.teamTypeButtonText,
+                    newTeam.type === 'amateur' && styles.teamTypeButtonTextActive
+                  ]}>Amateur</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.teamTypeButton,
+                    newTeam.type === 'pro' && styles.teamTypeButtonActive
+                  ]}
+                  onPress={() => setNewTeam(prev => ({ ...prev, type: 'pro' }))}
+                >
+                  <Trophy size={16} color={newTeam.type === 'pro' ? '#FFFFFF' : '#FFD700'} />
+                  <Text style={[
+                    styles.teamTypeButtonText,
+                    newTeam.type === 'pro' && styles.teamTypeButtonTextActive
+                  ]}>Pro</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <Pressable
+              style={[
+                styles.createTeamButton,
+                !newTeam.name.trim() && styles.createTeamButtonDisabled
+              ]}
+              onPress={handleCreateTeam}
+              disabled={!newTeam.name.trim()}
+            >
+              <Text style={styles.createTeamButtonText}>Create Team</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -475,6 +561,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   switchModeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+    padding: 12,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+  },
+  teamTypeButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  teamTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#2C2C2E',
+    padding: 12,
+    borderRadius: 8,
+  },
+  teamTypeButtonActive: {
+    backgroundColor: '#FF3B30',
+  },
+  teamTypeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  teamTypeButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  createTeamButton: {
+    backgroundColor: '#FF3B30',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  createTeamButtonDisabled: {
+    backgroundColor: '#2C2C2E',
+  },
+  createTeamButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
