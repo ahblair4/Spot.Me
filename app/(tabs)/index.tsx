@@ -2,15 +2,10 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
 import { Send, X, Keyboard, ArrowLeft } from 'lucide-react-native';
 import { useRoleStore } from '../../stores/roleStore';
+import { useTeamStore } from '../../stores/teamStore';
+import { useMessageStore } from '../../stores/messageStore';
 import { RoleToggle } from '../../components/RoleToggle';
 import { useNavigation } from 'expo-router';
-
-type Message = {
-  id: string;
-  text: string;
-  sender: 'spotter' | 'driver';
-  timestamp: Date;
-};
 
 type Selection = {
   line?: number;
@@ -40,12 +35,16 @@ const DRIVER_QUICK_MESSAGES: DriverQuickMessage[] = [
 export default function MessagesScreen() {
   const navigation = useNavigation();
   const role = useRoleStore(state => state.role);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const activeTeam = useTeamStore(state => state.activeTeam);
+  const { messages, addMessage, getTeamMessages } = useMessageStore();
   const [selection, setSelection] = useState<Selection>({});
   const [showZeroRunOptions, setShowZeroRunOptions] = useState(false);
   const [zeroRunSelection, setZeroRunSelection] = useState<ZeroRunOption>(null);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
+
+  // Get messages for the active team
+  const teamMessages = activeTeam ? getTeamMessages(activeTeam.id) : [];
 
   // Set up the header right button
   React.useLayoutEffect(() => {
@@ -55,6 +54,8 @@ export default function MessagesScreen() {
   }, [navigation]);
 
   const sendMessage = useCallback((text?: string) => {
+    if (!activeTeam) return; // Don't send if no team is selected
+
     let messageText: string;
 
     if (text) {
@@ -81,20 +82,18 @@ export default function MessagesScreen() {
       ].join('\n');
     }
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
+    addMessage({
       text: messageText,
       sender: role,
-      timestamp: new Date(),
-    };
+      teamId: activeTeam.id,
+    });
     
-    setMessages(prev => [...prev, newMessage]);
     setSelection({});
     setZeroRunSelection(null);
     setShowZeroRunOptions(false);
     setCustomMessage('');
     setShowCustomInput(false);
-  }, [selection, showZeroRunOptions, zeroRunSelection, role, customMessage, showCustomInput]);
+  }, [selection, showZeroRunOptions, zeroRunSelection, role, customMessage, showCustomInput, activeTeam, addMessage]);
 
   const renderMessage = ({ item }: { item: Message }) => (
     <View style={[
@@ -269,16 +268,24 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.messageList}
-      />
-      
-      <View style={styles.inputContainer}>
-        {role === 'spotter' ? renderSpotterInterface() : renderDriverInterface()}
-      </View>
+      {!activeTeam ? (
+        <View style={styles.noTeamContainer}>
+          <Text style={styles.noTeamText}>Select a team to start messaging</Text>
+        </View>
+      ) : (
+        <>
+          <FlatList
+            data={teamMessages}
+            renderItem={renderMessage}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.messageList}
+          />
+          
+          <View style={styles.inputContainer}>
+            {role === 'spotter' ? renderSpotterInterface() : renderDriverInterface()}
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -479,7 +486,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter_700Bold',
     textAlign: 'center',
-    marginRight: 70, // To offset the back button and center the title
+    marginRight: 70,
   },
   textInputWrapper: {
     backgroundColor: '#2C2C2E',
@@ -492,5 +499,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  noTeamContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  noTeamText: {
+    color: '#8E8E93',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
   },
 });

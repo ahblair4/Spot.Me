@@ -11,7 +11,7 @@ export function RoleToggle() {
       onPress={toggleRole}
     >
       <Text style={styles.text}>
-        Switch to {role === 'spotter' ? 'Driver' : 'Spotter'}
+        {role === 'spotter' ? 'Run Feedback' : 'Car Feedback'}
       </Text>
     </Pressable>
   );

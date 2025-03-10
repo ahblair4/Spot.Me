@@ -1,11 +1,12 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Flag, MessageCircle, Settings, User } from 'lucide-react-native';
-import { StyleSheet } from 'react-native';
-import { useRoleStore } from '../../stores/roleStore';
+import { StyleSheet, View } from 'react-native';
+import { useTeamStore } from '../../stores/teamStore';
+import { TeamSelector } from '../../components/TeamSelector';
 
 export default function TabLayout() {
-  const role = useRoleStore(state => state.role);
+  const activeTeam = useTeamStore(state => state.activeTeam);
   
   return (
     <Tabs
@@ -21,10 +22,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: role === 'spotter' ? 'Spotter' : 'Driver',
+          title: '',
+          headerTitle: () => (
+            <View style={styles.headerContent}>
+              <TeamSelector />
+            </View>
+          ),
           tabBarIcon: ({ color, size }) => (
             <MessageCircle size={size} color={color} />
           ),
+          tabBarLabel: 'Messages',
         }}
       />
       <Tabs.Screen
@@ -74,5 +81,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Inter_600SemiBold',
     fontSize: 17,
+  },
+  headerContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
