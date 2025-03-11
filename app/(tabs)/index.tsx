@@ -4,6 +4,7 @@ import { Send, X, Keyboard, ArrowLeft } from 'lucide-react-native';
 import { useRoleStore } from '../../stores/roleStore';
 import { useTeamStore } from '../../stores/teamStore';
 import { useMessageStore } from '../../stores/messageStore';
+import { useContactStore } from '../../stores/contactStore';
 import { RoleToggle } from '../../components/RoleToggle';
 import { useNavigation } from 'expo-router';
 
@@ -37,6 +38,7 @@ export default function MessagesScreen() {
   const role = useRoleStore(state => state.role);
   const activeTeam = useTeamStore(state => state.activeTeam);
   const { messages, addMessage, getTeamMessages } = useMessageStore();
+  const { contacts } = useContactStore();
   const [selection, setSelection] = useState<Selection>({});
   const [showZeroRunOptions, setShowZeroRunOptions] = useState(false);
   const [zeroRunSelection, setZeroRunSelection] = useState<ZeroRunOption>(null);
@@ -46,6 +48,20 @@ export default function MessagesScreen() {
   // Get messages for the active team
   const teamMessages = activeTeam ? getTeamMessages(activeTeam.id) : [];
 
+  // Group messages by sender
+  const groupedMessages = teamMessages.reduce((groups, message, index) => {
+    const prevMessage = teamMessages[index - 1];
+    const showSender = !prevMessage || prevMessage.senderId !== message.senderId;
+    
+    return [
+      ...groups,
+      {
+        ...message,
+        showSender,
+      }
+    ];
+  }, []);
+
   // Set up the header right button
   React.useLayoutEffect(() => {
     navigation.setOptions({
@@ -54,14 +70,14 @@ export default function MessagesScreen() {
   }, [navigation]);
 
   const sendMessage = useCallback((text?: string) => {
-    if (!activeTeam) return; // Don't send if no team is selected
+    if (!activeTeam) return;
 
     let messageText: string;
 
     if (text) {
       messageText = text;
     } else if (role === 'driver') {
-      return; // Driver must select a quick message
+      return;
     } else if (showZeroRunOptions && zeroRunSelection) {
       const zeroRunMessages = {
         mechanical: 'Chase car mechanical failure',
@@ -72,7 +88,7 @@ export default function MessagesScreen() {
     } else if (showCustomInput && customMessage.trim()) {
       messageText = customMessage.trim();
     } else if (!selection.line || !selection.angle || !selection.proximity || !selection.giveMeA) {
-      return; // Don't send if not all values are selected
+      return;
     } else {
       messageText = [
         `Angle: ${selection.angle}`,
@@ -82,9 +98,13 @@ export default function MessagesScreen() {
       ].join('\n');
     }
 
+    // Get the current user's contact ID (this would normally come from auth)
+    const userContact = contacts.find(c => c.role === role);
+    
     addMessage({
       text: messageText,
       sender: role,
+      senderId: userContact?.id || 'unknown',
       teamId: activeTeam.id,
     });
     
@@ -93,16 +113,31 @@ export default function MessagesScreen() {
     setShowZeroRunOptions(false);
     setCustomMessage('');
     setShowCustomInput(false);
-  }, [selection, showZeroRunOptions, zeroRunSelection, role, customMessage, showCustomInput, activeTeam, addMessage]);
+  }, [selection, showZeroRunOptions, zeroRunSelection, role, customMessage, showCustomInput, activeTeam, addMessage, contacts]);
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View style={[
-      styles.messageContainer,
-      item.sender === role ? styles.outgoingMessage : styles.incomingMessage
-    ]}>
-      <Text style={styles.messageText}>{item.text}</Text>
-    </View>
-  );
+  const renderMessage = ({ item }: { item: Message & { showSender: boolean } }) => {
+    const sender = contacts.find(c => c.id === item.senderId);
+    const isOutgoing = item.sender === role;
+    
+    return (
+      <View style={styles.messageWrapper}>
+        {item.showSender && (
+          <Text style={[
+            styles.senderName,
+            isOutgoing && styles.senderNameRight
+          ]}>
+            {sender?.name || 'Unknown User'}
+          </Text>
+        )}
+        <View style={[
+          styles.messageContainer,
+          isOutgoing ? styles.outgoingMessage : styles.incomingMessage
+        ]}>
+          <Text style={styles.messageText}>{item.text}</Text>
+        </View>
+      </View>
+    );
+  };
 
   const renderDriverInterface = () => (
     <View style={styles.driverContainer}>
@@ -275,7 +310,7 @@ export default function MessagesScreen() {
       ) : (
         <>
           <FlatList
-            data={teamMessages}
+            data={groupedMessages}
             renderItem={renderMessage}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.messageList}
@@ -299,11 +334,24 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
   },
+  messageWrapper: {
+    marginBottom: 16,
+  },
+  senderName: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 4,
+    marginLeft: 12,
+  },
+  senderNameRight: {
+    textAlign: 'right',
+    marginRight: 12,
+  },
   messageContainer: {
     maxWidth: '80%',
     padding: 12,
     borderRadius: 16,
-    marginVertical: 4,
   },
   outgoingMessage: {
     backgroundColor: '#FF3B30',

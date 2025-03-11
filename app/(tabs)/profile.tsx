@@ -1,40 +1,15 @@
 import { View, Text, StyleSheet, Image, ScrollView, Pressable, Modal, TextInput } from 'react-native';
-import { Users, QrCode, UserPlus, X, ScanLine, Trophy, Users as Users2, Plus, Settings2, LogOut } from 'lucide-react-native';
+import { Users, QrCode, UserPlus, X, ScanLine, Trophy, Users as Users2, Plus, Settings2, LogOut, Crown, Star, Clock } from 'lucide-react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
+import { useTeamStore } from '../../stores/teamStore';
+import { Contact, useContactStore } from '../../stores/contactStore';
 
-type Team = {
-  id: string;
+type NewContact = {
   name: string;
-  role: string;
-  memberCount: number;
-  type: 'pro' | 'amateur';
+  role: 'driver' | 'spotter' | 'crew';
 };
-
-const TEAMS: Team[] = [
-  {
-    id: '1',
-    name: 'Drift Kings',
-    role: 'Spotter',
-    memberCount: 8,
-    type: 'pro',
-  },
-  {
-    id: '2',
-    name: 'Night Runners',
-    role: 'Driver',
-    memberCount: 12,
-    type: 'amateur',
-  },
-  {
-    id: '3',
-    name: 'Apex Hunters',
-    role: 'Spotter',
-    memberCount: 6,
-    type: 'pro',
-  },
-];
 
 const ACTIONS = [
   {
@@ -49,16 +24,33 @@ const ACTIONS = [
   },
 ];
 
+const ROLES = ['driver', 'spotter', 'crew'] as const;
+
+const AVATARS = [
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
+  'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop',
+];
+
 export default function ProfileScreen() {
   const router = useRouter();
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrMode, setQrMode] = useState<'display' | 'scan'>('display');
   const [isManagingTeams, setIsManagingTeams] = useState(false);
   const [showNewTeamModal, setShowNewTeamModal] = useState(false);
-  const [teams, setTeams] = useState<Team[]>(TEAMS);
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [newContact, setNewContact] = useState<NewContact>({
+    name: '',
+    role: 'crew',
+  });
+  const { teams, addTeam } = useTeamStore();
+  const { contacts, addContact, removeContact } = useContactStore();
   const [newTeam, setNewTeam] = useState({
     name: '',
-    type: 'amateur' as 'amateur' | 'pro'
+    type: 'amateur' as 'amateur' | 'pro',
+    role: 'spotter' as 'driver' | 'spotter' | 'crew',
   });
   const userId = 'user123'; // This would come from your auth system
 
@@ -67,7 +59,9 @@ export default function ProfileScreen() {
       case 'qr':
         setQrModalVisible(true);
         break;
-      // Handle other actions
+      case 'contacts':
+        setShowContactsModal(true);
+        break;
     }
   };
 
@@ -78,22 +72,70 @@ export default function ProfileScreen() {
   const handleCreateTeam = () => {
     if (!newTeam.name.trim()) return;
 
-    const team: Team = {
-      id: Date.now().toString(),
+    addTeam({
       name: newTeam.name.trim(),
-      role: 'Spotter', // Default role
-      memberCount: 1, // Starting with the creator
       type: newTeam.type,
-    };
+      role: newTeam.role,
+    }, userId);
 
-    setTeams(prev => [...prev, team]);
-    setNewTeam({ name: '', type: 'amateur' });
+    setNewTeam({ name: '', type: 'amateur', role: 'spotter' });
     setShowNewTeamModal(false);
+    setIsManagingTeams(false);
   };
 
   const handleLeaveTeam = (teamId: string) => {
-    setTeams(prev => prev.filter(team => team.id !== teamId));
+    // TODO: Implement leave team functionality
   };
+
+  const handleAddContact = () => {
+    if (!newContact.name.trim()) return;
+
+    addContact({
+      name: newContact.name.trim(),
+      role: newContact.role,
+      avatar: AVATARS[Math.floor(Math.random() * AVATARS.length)],
+    });
+
+    setNewContact({ name: '', role: 'crew' });
+    setShowAddContactModal(false);
+  };
+
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case 'driver':
+        return <Crown size={16} color="#FFD700" />;
+      case 'spotter':
+        return <Star size={16} color="#FF3B30" />;
+      default:
+        return <Clock size={16} color="#8E8E93" />;
+    }
+  };
+
+  const renderContact = (contact: Contact) => (
+    <View key={contact.id} style={styles.contactCard}>
+      <Pressable
+        style={styles.deleteButton}
+        onPress={() => removeContact(contact.id)}
+      >
+        <Text style={styles.deleteButtonText}>×</Text>
+      </Pressable>
+
+      <Image source={{ uri: contact.avatar }} style={styles.contactAvatar} />
+      
+      <View style={styles.contactInfo}>
+        <Text style={styles.contactName}>{contact.name}</Text>
+        <View style={styles.roleContainer}>
+          {getRoleIcon(contact.role)}
+          <Text style={styles.roleName}>
+            {contact.role.charAt(0).toUpperCase() + contact.role.slice(1)}
+          </Text>
+        </View>
+        <Text style={styles.joinDate}>
+          Added {contact.createdAt.toLocaleDateString()}
+        </Text>
+      </View>
+    </View>
+  );
 
   return (
     <ScrollView style={styles.container}>
@@ -111,43 +153,43 @@ export default function ProfileScreen() {
 
       <View style={styles.actionsContainer}>
         {ACTIONS.map((action, index) => (
-          <Pressable
-            key={index}
-            style={styles.actionItem}
-            onPress={() => handleActionPress(action.action)}
-          >
-            <action.icon size={28} color="#FF3B30" />
-            <Text style={styles.actionText}>{action.label}</Text>
-          </Pressable>
+          <View key={index} style={styles.actionItem}>
+            <Pressable onPress={() => handleActionPress(action.action)}>
+              <action.icon size={28} color="#FF3B30" />
+              <Text style={styles.actionText}>{action.label}</Text>
+            </Pressable>
+          </View>
         ))}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Teams</Text>
-          <Pressable
-            style={styles.manageButton}
-            onPress={() => setIsManagingTeams(!isManagingTeams)}
-          >
-            <Settings2 size={20} color={isManagingTeams ? '#FF3B30' : '#FFFFFF'} />
-            <Text style={[styles.manageButtonText, isManagingTeams && styles.manageButtonTextActive]}>
-              Manage Teams
-            </Text>
-          </Pressable>
+          <View style={styles.manageButton}>
+            <Pressable onPress={() => setIsManagingTeams(!isManagingTeams)}>
+              <View style={styles.manageButtonContent}>
+                <Settings2 size={20} color={isManagingTeams ? '#FF3B30' : '#FFFFFF'} />
+                <Text style={[styles.manageButtonText, isManagingTeams && styles.manageButtonTextActive]}>
+                  Manage Teams
+                </Text>
+              </View>
+            </Pressable>
+          </View>
         </View>
 
         {isManagingTeams && (
-          <Pressable
-            style={styles.newTeamButton}
-            onPress={() => setShowNewTeamModal(true)}
-          >
-            <Plus size={20} color="#FFFFFF" />
-            <Text style={styles.newTeamButtonText}>Create New Team</Text>
-          </Pressable>
+          <View style={styles.newTeamButton}>
+            <Pressable onPress={() => setShowNewTeamModal(true)}>
+              <View style={styles.newTeamButtonContent}>
+                <Plus size={20} color="#FFFFFF" />
+                <Text style={styles.newTeamButtonText}>Create New Team</Text>
+              </View>
+            </Pressable>
+          </View>
         )}
 
         {teams.map((team) => (
-          <Pressable key={team.id} style={styles.teamItem}>
+          <View key={team.id} style={styles.teamItem}>
             <View style={styles.teamContent}>
               <View style={styles.teamHeader}>
                 <View>
@@ -167,24 +209,24 @@ export default function ProfileScreen() {
                   <Text style={styles.memberCountText}>{team.memberCount} members</Text>
                 </View>
                 {isManagingTeams ? (
-                  <Pressable 
-                    style={styles.leaveButton}
-                    onPress={() => handleLeaveTeam(team.id)}
-                  >
-                    <LogOut size={16} color="#FF3B30" />
-                    <Text style={styles.leaveButtonText}>Leave</Text>
-                  </Pressable>
+                  <View style={styles.leaveButton}>
+                    <Pressable onPress={() => handleLeaveTeam(team.id)}>
+                      <View style={styles.leaveButtonContent}>
+                        <LogOut size={16} color="#FF3B30" />
+                        <Text style={styles.leaveButtonText}>Leave</Text>
+                      </View>
+                    </Pressable>
+                  </View>
                 ) : (
-                  <Pressable 
-                    style={styles.viewButton}
-                    onPress={() => handleViewTeam(team.id)}
-                  >
-                    <Text style={styles.viewButtonText}>View</Text>
-                  </Pressable>
+                  <View style={styles.viewButton}>
+                    <Pressable onPress={() => handleViewTeam(team.id)}>
+                      <Text style={styles.viewButtonText}>View</Text>
+                    </Pressable>
+                  </View>
                 )}
               </View>
             </View>
-          </Pressable>
+          </View>
         ))}
       </View>
 
@@ -200,12 +242,11 @@ export default function ProfileScreen() {
               <Text style={styles.modalTitle}>
                 {qrMode === 'display' ? 'Your QR Code' : 'Scan QR Code'}
               </Text>
-              <Pressable
-                style={styles.closeButton}
-                onPress={() => setQrModalVisible(false)}
-              >
-                <X size={24} color="#8E8E93" />
-              </Pressable>
+              <View style={styles.closeButton}>
+                <Pressable onPress={() => setQrModalVisible(false)}>
+                  <X size={24} color="#8E8E93" />
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.qrContainer}>
@@ -226,14 +267,13 @@ export default function ProfileScreen() {
               )}
             </View>
 
-            <Pressable
-              style={styles.switchModeButton}
-              onPress={() => setQrMode(qrMode === 'display' ? 'scan' : 'display')}
-            >
-              <Text style={styles.switchModeText}>
-                {qrMode === 'display' ? 'Scan QR Code' : 'Show My QR Code'}
-              </Text>
-            </Pressable>
+            <View style={styles.switchModeButton}>
+              <Pressable onPress={() => setQrMode(qrMode === 'display' ? 'scan' : 'display')}>
+                <Text style={styles.switchModeText}>
+                  {qrMode === 'display' ? 'Scan QR Code' : 'Show My QR Code'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -244,22 +284,23 @@ export default function ProfileScreen() {
         transparent={true}
         onRequestClose={() => {
           setShowNewTeamModal(false);
-          setNewTeam({ name: '', type: 'amateur' });
+          setNewTeam({ name: '', type: 'amateur', role: 'spotter' });
         }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create New Team</Text>
-              <Pressable
-                style={styles.closeButton}
-                onPress={() => {
-                  setShowNewTeamModal(false);
-                  setNewTeam({ name: '', type: 'amateur' });
-                }}
-              >
-                <X size={24} color="#8E8E93" />
-              </Pressable>
+              <View style={styles.closeButton}>
+                <Pressable
+                  onPress={() => {
+                    setShowNewTeamModal(false);
+                    setNewTeam({ name: '', type: 'amateur', role: 'spotter' });
+                  }}
+                >
+                  <X size={24} color="#8E8E93" />
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -276,31 +317,47 @@ export default function ProfileScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Team Type</Text>
               <View style={styles.teamTypeButtons}>
-                <Pressable
-                  style={[
-                    styles.teamTypeButton,
-                    newTeam.type === 'amateur' && styles.teamTypeButtonActive
-                  ]}
-                  onPress={() => setNewTeam(prev => ({ ...prev, type: 'amateur' }))}
-                >
-                  <Text style={[
-                    styles.teamTypeButtonText,
-                    newTeam.type === 'amateur' && styles.teamTypeButtonTextActive
-                  ]}>Amateur</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.teamTypeButton,
-                    newTeam.type === 'pro' && styles.teamTypeButtonActive
-                  ]}
-                  onPress={() => setNewTeam(prev => ({ ...prev, type: 'pro' }))}
-                >
-                  <Trophy size={16} color={newTeam.type === 'pro' ? '#FFFFFF' : '#FFD700'} />
-                  <Text style={[
-                    styles.teamTypeButtonText,
-                    newTeam.type === 'pro' && styles.teamTypeButtonTextActive
-                  ]}>Pro</Text>
-                </Pressable>
+                <View style={[styles.teamTypeButton, newTeam.type === 'amateur' && styles.teamTypeButtonActive]}>
+                  <Pressable onPress={() => setNewTeam(prev => ({ ...prev, type: 'amateur' }))}>
+                    <Text style={[styles.teamTypeButtonText, newTeam.type === 'amateur' && styles.teamTypeButtonTextActive]}>
+                      Amateur
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={[styles.teamTypeButton, newTeam.type === 'pro' && styles.teamTypeButtonActive]}>
+                  <Pressable onPress={() => setNewTeam(prev => ({ ...prev, type: 'pro' }))}>
+                    <View style={styles.teamTypeButtonContent}>
+                      <Trophy size={16} color={newTeam.type === 'pro' ? '#FFFFFF' : '#FFD700'} />
+                      <Text style={[styles.teamTypeButtonText, newTeam.type === 'pro' && styles.teamTypeButtonTextActive]}>
+                        Pro
+                      </Text>
+                    </View>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Your Role</Text>
+              <View style={styles.roleButtons}>
+                {ROLES.map((role) => (
+                  <Pressable
+                    key={role}
+                    style={[
+                      styles.roleButton,
+                      newTeam.role === role && styles.roleButtonActive
+                    ]}
+                    onPress={() => setNewTeam(prev => ({ ...prev, role }))}
+                  >
+                    {getRoleIcon(role)}
+                    <Text style={[
+                      styles.roleButtonText,
+                      newTeam.role === role && styles.roleButtonTextActive
+                    ]}>
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
             </View>
 
@@ -313,6 +370,115 @@ export default function ProfileScreen() {
               disabled={!newTeam.name.trim()}
             >
               <Text style={styles.createTeamButtonText}>Create Team</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showContactsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowContactsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Contacts</Text>
+              <View style={styles.closeButton}>
+                <Pressable onPress={() => setShowContactsModal(false)}>
+                  <X size={24} color="#8E8E93" />
+                </Pressable>
+              </View>
+            </View>
+
+            <ScrollView style={styles.contactsList}>
+              {contacts.map(renderContact)}
+            </ScrollView>
+
+            <Pressable
+              style={styles.addContactButton}
+              onPress={() => {
+                setShowContactsModal(false);
+                setShowAddContactModal(true);
+              }}
+            >
+              <Plus size={24} color="#FFFFFF" />
+              <Text style={styles.addContactButtonText}>Add Contact</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAddContactModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowAddContactModal(false);
+          setNewContact({ name: '', role: 'crew' });
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Contact</Text>
+              <View style={styles.closeButton}>
+                <Pressable
+                  onPress={() => {
+                    setShowAddContactModal(false);
+                    setNewContact({ name: '', role: 'crew' });
+                  }}
+                >
+                  <X size={24} color="#8E8E93" />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={newContact.name}
+                onChangeText={(text) => setNewContact(prev => ({ ...prev, name: text }))}
+                placeholder="Enter contact's name"
+                placeholderTextColor="#8E8E93"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Role</Text>
+              <View style={styles.roleButtons}>
+                {ROLES.map((role) => (
+                  <Pressable
+                    key={role}
+                    style={[
+                      styles.roleButton,
+                      newContact.role === role && styles.roleButtonActive
+                    ]}
+                    onPress={() => setNewContact(prev => ({ ...prev, role }))}
+                  >
+                    {getRoleIcon(role)}
+                    <Text style={[
+                      styles.roleButtonText,
+                      newContact.role === role && styles.roleButtonTextActive
+                    ]}>
+                      {role.charAt(0).toUpperCase() + role.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <Pressable
+              style={[
+                styles.addContactButton,
+                !newContact.name.trim() && styles.addContactButtonDisabled
+              ]}
+              onPress={handleAddContact}
+              disabled={!newContact.name.trim()}
+            >
+              <Text style={styles.addContactButtonText}>Add Contact</Text>
             </Pressable>
           </View>
         </View>
@@ -397,12 +563,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_700Bold',
   },
   manageButton: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+  },
+  manageButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#2C2C2E',
   },
   manageButtonText: {
     color: '#FFFFFF',
@@ -413,14 +581,16 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
   },
   newTeamButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  newTeamButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#FF3B30',
     padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
   },
   newTeamButtonText: {
     color: '#FFFFFF',
@@ -484,9 +654,9 @@ const styles = StyleSheet.create({
   },
   viewButton: {
     backgroundColor: '#2C2C2E',
+    borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
   },
   viewButtonText: {
     color: '#FF3B30',
@@ -494,13 +664,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
   },
   leaveButton: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+  },
+  leaveButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#2C2C2E',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
   },
   leaveButtonText: {
     color: '#FF3B30',
@@ -517,6 +689,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -556,14 +729,14 @@ const styles = StyleSheet.create({
   },
   switchModeButton: {
     backgroundColor: '#FF3B30',
-    padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
   },
   switchModeText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
+    padding: 16,
   },
   inputGroup: {
     marginBottom: 20,
@@ -588,6 +761,108 @@ const styles = StyleSheet.create({
   },
   teamTypeButton: {
     flex: 1,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+  },
+  teamTypeButtonActive: {
+    backgroundColor: '#FF3B30',
+  },
+  teamTypeButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+  },
+  teamTypeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
+    padding: 12,
+  },
+  teamTypeButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  createTeamButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  createTeamButtonDisabled: {
+    backgroundColor: '#2C2C2E',
+  },
+  createTeamButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
+    padding: 16,
+  },
+  contactsList: {
+    maxHeight: '60%',
+  },
+  contactCard: {
+    backgroundColor: '#2C2C2E',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  contactAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  contactInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  contactName: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontFamily: 'Inter_600SemiBold',
+  },
+  roleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  roleName: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+  },
+  joinDate: {
+    color: '#8E8E93',
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  roleButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  roleButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -596,28 +871,31 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
-  teamTypeButtonActive: {
+  roleButtonActive: {
     backgroundColor: '#FF3B30',
   },
-  teamTypeButtonText: {
+  roleButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
   },
-  teamTypeButtonTextActive: {
+  roleButtonTextActive: {
     color: '#FFFFFF',
   },
-  createTeamButton: {
+  addContactButton: {
     backgroundColor: '#FF3B30',
-    padding: 16,
     borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
   },
-  createTeamButtonDisabled: {
+  addContactButtonDisabled: {
     backgroundColor: '#2C2C2E',
   },
-  createTeamButtonText: {
+  addContactButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',

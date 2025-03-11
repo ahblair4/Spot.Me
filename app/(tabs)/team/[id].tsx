@@ -1,10 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Modal, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Trophy, Crown, Star, Clock, CreditCard as Edit2, X, Plus, GripVertical, LogOut } from 'lucide-react-native';
+import { Crown, Star, Clock, Trophy, Plus, X, ArrowLeft, GripVertical, Search } from 'lucide-react-native';
 import { useState, useMemo } from 'react';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useTeamStore } from '../../../stores/teamStore';
+import { useContactStore } from '../../../stores/contactStore';
 
 type TeamMember = {
   id: string;
@@ -15,86 +17,41 @@ type TeamMember = {
   order?: number;
 };
 
-type NewMember = {
-  name: string;
-  role: 'driver' | 'spotter' | 'crew';
-};
-
-// Mock data - replace with actual data fetching
-const TEAM_MEMBERS: Record<string, TeamMember[]> = {
-  '1': [
-    {
-      id: '1',
-      name: 'Mike Chen',
-      role: 'driver',
-      joinedAt: '2024-01-15',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop',
-      order: 0,
-    },
-    {
-      id: '2',
-      name: 'Sarah Johnson',
-      role: 'spotter',
-      joinedAt: '2024-01-15',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop',
-      order: 1,
-    },
-    {
-      id: '3',
-      name: 'Alex Rodriguez',
-      role: 'crew',
-      joinedAt: '2024-01-20',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop',
-      order: 2,
-    },
-    {
-      id: '4',
-      name: 'Emily White',
-      role: 'crew',
-      joinedAt: '2024-02-01',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop',
-      order: 3,
-    },
-  ],
-};
-
-const TEAMS: Record<string, { name: string; type: 'pro' | 'amateur' }> = {
-  '1': { name: 'Drift Kings', type: 'pro' },
-};
-
 const ROLES = ['driver', 'spotter', 'crew'] as const;
 
 export default function TeamDetailsScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const teamId = typeof id === 'string' ? id : id[0];
+  const { getTeam } = useTeamStore();
+  const { contacts } = useContactStore();
+  const team = getTeam(teamId);
   const [isEditing, setIsEditing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [members, setMembers] = useState(TEAM_MEMBERS[teamId] || []);
-  const [newMember, setNewMember] = useState<NewMember>({
-    name: '',
-    role: 'crew',
-  });
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const team = TEAMS[teamId];
-
-  const sortedMembers = useMemo(() => {
-    if (isEditing) {
-      return members;
-    }
-    return [...members].sort((a, b) => {
-      const roleOrder = { driver: 0, spotter: 1, crew: 2 };
-      const roleDiff = roleOrder[a.role] - roleOrder[b.role];
-      
-      if (roleDiff !== 0) return roleDiff;
-      return new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime();
-    });
-  }, [members, isEditing]);
+  const filteredContacts = useMemo(() => {
+    if (!searchQuery.trim()) return contacts;
+    const query = searchQuery.toLowerCase();
+    return contacts.filter(contact => 
+      contact.name.toLowerCase().includes(query) ||
+      contact.role.toLowerCase().includes(query)
+    );
+  }, [contacts, searchQuery]);
 
   if (!team) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Team not found</Text>
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.replace('/profile')}
+          >
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </Pressable>
+          <Text style={styles.errorText}>Team not found</Text>
+        </View>
       </View>
     );
   }
@@ -114,21 +71,22 @@ export default function TeamDetailsScreen() {
     setMembers(prev => prev.filter(member => member.id !== memberId));
   };
 
-  const addMember = () => {
-    if (!newMember.name.trim()) return;
+  const addMember = (contact: typeof contacts[0]) => {
+    const existingMember = members.find(member => member.id === contact.id);
+    if (existingMember) return;
 
     const member: TeamMember = {
-      id: Date.now().toString(),
-      name: newMember.name.trim(),
-      role: newMember.role,
+      id: contact.id,
+      name: contact.name,
+      role: contact.role,
       joinedAt: new Date().toISOString(),
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
+      avatar: contact.avatar,
       order: members.length,
     };
 
     setMembers(prev => [...prev, member]);
-    setNewMember({ name: '', role: 'crew' });
     setShowAddModal(false);
+    setSearchQuery('');
   };
 
   const renderMember = ({ item, drag, isActive }: any) => {
@@ -179,12 +137,29 @@ export default function TeamDetailsScreen() {
     );
   };
 
+  const renderContact = ({ item }: { item: typeof contacts[0] }) => (
+    <Pressable
+      style={styles.contactOption}
+      onPress={() => addMember(item)}
+    >
+      <View style={styles.contactInfo}>
+        <Text style={styles.contactName}>{item.name}</Text>
+        <View style={styles.roleContainer}>
+          {getRoleIcon(item.role)}
+          <Text style={styles.roleName}>
+            {item.role.charAt(0).toUpperCase() + item.role.slice(1)}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/profile')}
         >
           <ArrowLeft size={24} color="#FFFFFF" />
         </Pressable>
@@ -198,7 +173,7 @@ export default function TeamDetailsScreen() {
       </View>
 
       <DraggableFlatList
-        data={sortedMembers}
+        data={members}
         onDragEnd={({ data }) => setMembers(data)}
         keyExtractor={item => item.id}
         renderItem={renderMember}
@@ -214,7 +189,7 @@ export default function TeamDetailsScreen() {
           style={[styles.editButton, isEditing && styles.editButtonActive]}
           onPress={() => setIsEditing(!isEditing)}
         >
-          <Edit2 size={24} color={isEditing ? '#FF3B30' : '#FFFFFF'} />
+          <Plus size={24} color={isEditing ? '#FF3B30' : '#FFFFFF'} />
         </Pressable>
         <Pressable 
           style={styles.addButton}
@@ -237,58 +212,31 @@ export default function TeamDetailsScreen() {
                 style={styles.closeButton}
                 onPress={() => {
                   setShowAddModal(false);
-                  setNewMember({ name: '', role: 'crew' });
+                  setSearchQuery('');
                 }}
               >
                 <X size={24} color="#8E8E93" />
               </Pressable>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Name</Text>
+            <View style={styles.searchContainer}>
+              <Search size={20} color="#8E8E93" />
               <TextInput
-                style={styles.input}
-                value={newMember.name}
-                onChangeText={(text) => setNewMember(prev => ({ ...prev, name: text }))}
-                placeholder="Enter member's name"
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search contacts..."
                 placeholderTextColor="#8E8E93"
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Role</Text>
-              <View style={styles.roleButtons}>
-                {ROLES.map((role) => (
-                  <Pressable
-                    key={role}
-                    style={[
-                      styles.roleButton,
-                      newMember.role === role && styles.roleButtonActive
-                    ]}
-                    onPress={() => setNewMember(prev => ({ ...prev, role }))}
-                  >
-                    {getRoleIcon(role)}
-                    <Text style={[
-                      styles.roleButtonText,
-                      newMember.role === role && styles.roleButtonTextActive
-                    ]}>
-                      {role.charAt(0).toUpperCase() + role.slice(1)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <Pressable
-              style={[
-                styles.addMemberButton,
-                !newMember.name.trim() && styles.addMemberButtonDisabled
-              ]}
-              onPress={addMember}
-              disabled={!newMember.name.trim()}
-            >
-              <Text style={styles.addMemberButtonText}>Add Member</Text>
-            </Pressable>
+            <FlatList
+              data={filteredContacts}
+              renderItem={renderContact}
+              keyExtractor={item => item.id}
+              style={styles.contactsList}
+              contentContainerStyle={styles.contactsListContent}
+            />
           </View>
         </View>
       </Modal>
@@ -317,6 +265,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#FFFFFF',
     fontFamily: 'Inter_700Bold',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#FF3B30',
+    fontFamily: 'Inter_600SemiBold',
+    textAlign: 'center',
   },
   proBadge: {
     flexDirection: 'row',
@@ -459,12 +414,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 24,
-    gap: 20,
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 24,
   },
   modalTitle: {
     fontSize: 20,
@@ -474,66 +430,38 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  inputGroup: {
-    gap: 8,
-  },
-  inputLabel: {
-    fontSize: 14,
-    color: '#8E8E93',
-    fontFamily: 'Inter_600SemiBold',
-  },
-  input: {
-    backgroundColor: '#2C2C2E',
-    borderRadius: 8,
-    padding: 12,
-    color: '#FFFFFF',
-    fontFamily: 'Inter_400Regular',
-    fontSize: 16,
-  },
-  roleButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  roleButton: {
-    flex: 1,
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
     backgroundColor: '#2C2C2E',
-    padding: 12,
     borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    gap: 12,
   },
-  roleButtonActive: {
-    backgroundColor: '#FF3B30',
-  },
-  roleButtonText: {
+  searchInput: {
+    flex: 1,
     color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
   },
-  roleButtonTextActive: {
-    color: '#FFFFFF',
+  contactsList: {
+    maxHeight: '70%',
   },
-  addMemberButton: {
-    backgroundColor: '#FF3B30',
+  contactsListContent: {
+    gap: 8,
+  },
+  contactOption: {
+    backgroundColor: '#2C2C2E',
     borderRadius: 8,
     padding: 16,
-    alignItems: 'center',
   },
-  addMemberButtonDisabled: {
-    backgroundColor: '#2C2C2E',
+  contactInfo: {
+    gap: 4,
   },
-  addMemberButtonText: {
+  contactName: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
-  },
-  errorText: {
-    color: '#FF3B30',
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    textAlign: 'center',
-    marginTop: 24,
   },
 });

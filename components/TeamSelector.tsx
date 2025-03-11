@@ -3,22 +3,11 @@ import { View, Text, StyleSheet, Pressable, Modal, ScrollView } from 'react-nati
 import { ChevronDown, X } from 'lucide-react-native';
 import { useTeamStore } from '../stores/teamStore';
 
-type Team = {
-  id: string;
-  name: string;
-};
-
-const TEAMS: Team[] = [
-  { id: '1', name: 'Drift Kings' },
-  { id: '2', name: 'Night Runners' },
-  { id: '3', name: 'Apex Hunters' },
-];
-
 export function TeamSelector() {
   const [showModal, setShowModal] = useState(false);
-  const { activeTeam, setActiveTeam } = useTeamStore();
+  const { teams, activeTeam, setActiveTeam } = useTeamStore();
 
-  const handleTeamSelect = (team: Team) => {
+  const handleTeamSelect = (team) => {
     setActiveTeam(team);
     setShowModal(false);
   };
@@ -54,7 +43,7 @@ export function TeamSelector() {
             </View>
 
             <ScrollView style={styles.teamList}>
-              {TEAMS.map((team) => (
+              {teams.map((team) => (
                 <Pressable
                   key={team.id}
                   style={[

@@ -4,6 +4,7 @@ export type Message = {
   id: string;
   text: string;
   sender: 'spotter' | 'driver';
+  senderId: string;
   timestamp: Date;
   teamId: string;
 };
@@ -24,6 +25,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }],
   })),
   getTeamMessages: (teamId) => {
-    return get().messages.filter(message => message.teamId === teamId);
+    return get().messages
+      .filter(message => message.teamId === teamId)
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   },
 }));
